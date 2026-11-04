@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/flyteorg/flyte/v2/gen/go/flyteidl2/core"
 	"github.com/flyteorg/flyte/v2/gen/go/flyteidl2/settings"
 	"github.com/flyteorg/flyte/v2/gen/go/flyteidl2/task"
 )
@@ -45,5 +46,18 @@ func applyRunSettings(spec *task.RunSpec, resolved *settings.Settings) {
 	if rawDataPath := resolved.GetStorage().GetRawDataPath(); spec.GetRawDataStorage().GetRawDataPrefix() == "" &&
 		rawDataPath.GetState() == settings.SettingState_SETTING_STATE_VALUE {
 		spec.RawDataStorage = &task.RawDataStorage{RawDataPrefix: rawDataPath.GetStringValue()}
+	}
+
+	// Projected onto tasks that name no account of their own. Only the service
+	// account is filled; every other security_context field stays as the request left it.
+	if sa := resolved.GetSecurity().GetServiceAccount(); spec.GetSecurityContext().GetRunAs().GetK8SServiceAccount() == "" &&
+		sa.GetState() == settings.SettingState_SETTING_STATE_VALUE {
+		if spec.SecurityContext == nil {
+			spec.SecurityContext = &core.SecurityContext{}
+		}
+		if spec.SecurityContext.RunAs == nil {
+			spec.SecurityContext.RunAs = &core.Identity{}
+		}
+		spec.SecurityContext.RunAs.K8SServiceAccount = sa.GetStringValue()
 	}
 }

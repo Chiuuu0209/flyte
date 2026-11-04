@@ -1121,12 +1121,14 @@ func applyRunSpecToTaskAction(taskAction *executorv1.TaskAction, runSpec *task.R
 		taskAction.Spec.Interruptible = nil
 		taskAction.Spec.PodTemplateName = ""
 		taskAction.Spec.RawDataPrefix = ""
+		taskAction.Spec.K8sServiceAccount = ""
 		return
 	}
 
 	taskAction.Spec.EnvVars = keyValuePairsToMap(runSpec.GetEnvs().GetValues())
 	taskAction.Spec.PodTemplateName = runSpec.GetDefaultSettings().GetPodTemplateName()
 	taskAction.Spec.RawDataPrefix = runSpec.GetRawDataStorage().GetRawDataPrefix()
+	taskAction.Spec.K8sServiceAccount = runSpec.GetSecurityContext().GetRunAs().GetK8SServiceAccount()
 	if runSpec.GetInterruptible() != nil {
 		value := runSpec.GetInterruptible().GetValue()
 		taskAction.Spec.Interruptible = &value
@@ -1157,6 +1159,7 @@ func inheritRunContextFromParentTaskAction(taskAction *executorv1.TaskAction, pa
 	taskAction.Spec.EnvVars = cloneStringMap(parentTaskAction.Spec.EnvVars)
 	taskAction.Spec.PodTemplateName = parentTaskAction.Spec.PodTemplateName
 	taskAction.Spec.RawDataPrefix = parentTaskAction.Spec.RawDataPrefix
+	taskAction.Spec.K8sServiceAccount = parentTaskAction.Spec.K8sServiceAccount
 	if len(parentTaskAction.Annotations) > 0 {
 		if taskAction.Annotations == nil {
 			taskAction.Annotations = map[string]string{}

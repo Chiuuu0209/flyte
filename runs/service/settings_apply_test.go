@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"github.com/flyteorg/flyte/v2/gen/go/flyteidl2/core"
 	"github.com/flyteorg/flyte/v2/gen/go/flyteidl2/settings"
 	"github.com/flyteorg/flyte/v2/gen/go/flyteidl2/task"
 	"github.com/stretchr/testify/assert"
@@ -26,16 +27,22 @@ func rawDataSettings(rawDataPath *settings.StringSetting) *settings.Settings {
 	return &settings.Settings{Storage: &settings.StorageSettings{RawDataPath: rawDataPath}}
 }
 
+func serviceAccountSettings(sa *settings.StringSetting) *settings.Settings {
+	return &settings.Settings{Security: &settings.SecuritySettings{ServiceAccount: sa}}
+}
+
 func TestApplyRunSettings(t *testing.T) {
 	tests := []struct {
-		name              string
-		spec              *task.RunSpec
-		resolved          *settings.Settings
-		wantQueue         string
-		wantConcurrency   uint32
-		wantPodTemplate   string
-		wantRunBaseDir    string
-		wantRawDataPrefix string
+		name               string
+		spec               *task.RunSpec
+		resolved           *settings.Settings
+		wantQueue          string
+		wantConcurrency    uint32
+		wantPodTemplate    string
+		wantRunBaseDir     string
+		wantRawDataPrefix  string
+		wantServiceAccount string
+		wantIAMRole        string
 	}{
 		{
 			name:      "empty queue takes the settings value",
@@ -145,6 +152,42 @@ func TestApplyRunSettings(t *testing.T) {
 			resolved:          rawDataSettings(&settings.StringSetting{State: stateValue, StringValue: "s3://settings-raw"}),
 			wantRawDataPrefix: "s3://settings-raw",
 		},
+		{
+			name:               "empty service account takes the settings value",
+			spec:               &task.RunSpec{},
+			resolved:           serviceAccountSettings(&settings.StringSetting{State: stateValue, StringValue: "settings-sa"}),
+			wantServiceAccount: "settings-sa",
+		},
+		{
+			name: "an explicit service account wins over settings",
+			spec: &task.RunSpec{SecurityContext: &core.SecurityContext{
+				RunAs: &core.Identity{K8SServiceAccount: "request-sa"},
+			}},
+			resolved:           serviceAccountSettings(&settings.StringSetting{State: stateValue, StringValue: "settings-sa"}),
+			wantServiceAccount: "request-sa",
+		},
+		{
+			name:               "a service account in INHERIT contributes nothing",
+			spec:               &task.RunSpec{},
+			resolved:           serviceAccountSettings(&settings.StringSetting{State: stateInherit, StringValue: "settings-sa"}),
+			wantServiceAccount: "",
+		},
+		{
+			name:               "a service account in UNSET contributes nothing",
+			spec:               &task.RunSpec{},
+			resolved:           serviceAccountSettings(&settings.StringSetting{State: stateUnset, StringValue: "settings-sa"}),
+			wantServiceAccount: "",
+		},
+		{
+			// Filling the account must not replace a security context the request already set.
+			name: "an empty service account keeps the rest of the security context",
+			spec: &task.RunSpec{SecurityContext: &core.SecurityContext{
+				RunAs: &core.Identity{IamRole: "arn:aws:iam::123:role/run"},
+			}},
+			resolved:           serviceAccountSettings(&settings.StringSetting{State: stateValue, StringValue: "settings-sa"}),
+			wantServiceAccount: "settings-sa",
+			wantIAMRole:        "arn:aws:iam::123:role/run",
+		},
 	}
 
 	for _, tt := range tests {
@@ -155,6 +198,8 @@ func TestApplyRunSettings(t *testing.T) {
 			assert.Equal(t, tt.wantPodTemplate, tt.spec.GetDefaultSettings().GetPodTemplateName())
 			assert.Equal(t, tt.wantRunBaseDir, tt.spec.GetRunBaseDir())
 			assert.Equal(t, tt.wantRawDataPrefix, tt.spec.GetRawDataStorage().GetRawDataPrefix())
+			assert.Equal(t, tt.wantServiceAccount, tt.spec.GetSecurityContext().GetRunAs().GetK8SServiceAccount())
+			assert.Equal(t, tt.wantIAMRole, tt.spec.GetSecurityContext().GetRunAs().GetIamRole())
 		})
 	}
 }

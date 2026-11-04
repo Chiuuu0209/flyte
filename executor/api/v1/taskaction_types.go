@@ -200,6 +200,12 @@ type TaskActionSpec struct {
 	// +optional
 	RawDataPrefix string `json:"rawDataPrefix,omitempty"`
 
+	// K8sServiceAccount is the run-scoped Kubernetes service account projected from
+	// RunSpec.SecurityContext. Used when the task template names none.
+	// +optional
+	// +kubebuilder:validation:MaxLength=253
+	K8sServiceAccount string `json:"k8sServiceAccount,omitempty"`
+
 	// Group is the group this action belongs to, if applicable.
 	// +optional
 	// +kubebuilder:validation:MaxLength=256

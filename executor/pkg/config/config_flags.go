@@ -78,7 +78,7 @@ func (cfg Config) GetPFlagSet(prefix string) *pflag.FlagSet {
 	cmdFlags.StringSlice(fmt.Sprintf("%v%v", prefix, "cacheService.auth.scopes"), defaultConfig.CacheService.Auth.Scopes, "Cache service OAuth 2.0 scopes")
 	cmdFlags.String(fmt.Sprintf("%v%v", prefix, "cacheService.auth.audience"), defaultConfig.CacheService.Auth.Audience, "Cache service OAuth 2.0 token audience")
 	cmdFlags.String(fmt.Sprintf("%v%v", prefix, "cluster"), defaultConfig.Cluster, "Cluster identifier for action events")
-	cmdFlags.String(fmt.Sprintf("%v%v", prefix, "defaultK8sServiceAccount"), defaultConfig.DefaultK8sServiceAccount, "Default Kubernetes service account for task pods when the task does not set one")
+	cmdFlags.String(fmt.Sprintf("%v%v", prefix, "defaultK8sServiceAccount"), defaultConfig.DefaultK8sServiceAccount, "Default Kubernetes service account for task pods when neither the task nor the run sets one")
 	cmdFlags.Int32(fmt.Sprintf("%v%v", prefix, "maxSystemFailures"), defaultConfig.MaxSystemFailures, "Max system-level failures per attempt before forcing permanent failure")
 	cmdFlags.String(fmt.Sprintf("%v%v", prefix, "requeueDuration"), defaultConfig.RequeueDuration.String(), "How long to wait before reconciling a running TaskAction again. 0 means the default of 10s")
 	cmdFlags.String(fmt.Sprintf("%v%v", prefix, "gc.interval"), defaultConfig.GC.Interval.String(), "How often the garbage collector runs. 0 disables GC.")

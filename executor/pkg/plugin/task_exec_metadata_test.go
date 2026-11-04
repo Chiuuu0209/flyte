@@ -19,16 +19,80 @@ import (
 )
 
 func TestResolveServiceAccount(t *testing.T) {
-	// A service account set on the task's security context always wins over the default.
-	sc := &core.SecurityContext{RunAs: &core.Identity{K8SServiceAccount: "custom-sa"}}
-	require.Equal(t, "custom-sa", resolveServiceAccount(sc, "config-default-sa"))
+	taskSA := &core.SecurityContext{RunAs: &core.Identity{K8SServiceAccount: "task-sa"}}
+	tests := []struct {
+		name      string
+		sc        *core.SecurityContext
+		runSA     string
+		defaultSA string
+		want      string
+	}{
+		{
+			name:      "task account wins over the run and the default",
+			sc:        taskSA,
+			runSA:     "run-sa",
+			defaultSA: "config-default-sa",
+			want:      "task-sa",
+		},
+		{
+			name:      "run account wins over the default",
+			runSA:     "run-sa",
+			defaultSA: "config-default-sa",
+			want:      "run-sa",
+		},
+		{
+			name:      "an empty task account does not block the run account",
+			sc:        &core.SecurityContext{},
+			runSA:     "run-sa",
+			defaultSA: "config-default-sa",
+			want:      "run-sa",
+		},
+		{
+			name:      "an iam role alone does not count as a service account",
+			sc:        &core.SecurityContext{RunAs: &core.Identity{IamRole: "arn:role"}},
+			runSA:     "run-sa",
+			defaultSA: "config-default-sa",
+			want:      "run-sa",
+		},
+		{
+			name:      "default is used when neither the task nor the run sets one",
+			defaultSA: "config-default-sa",
+			want:      "config-default-sa",
+		},
+		{
+			name: "empty default stays empty",
+			want: "",
+		},
+	}
 
-	// With no run account, it falls back to the provided default. Getters are nil-safe.
-	require.Equal(t, "config-default-sa", resolveServiceAccount(nil, "config-default-sa"))
-	require.Equal(t, "config-default-sa", resolveServiceAccount(&core.SecurityContext{}, "config-default-sa"))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, resolveServiceAccount(tt.sc, tt.runSA, tt.defaultSA))
+		})
+	}
+}
 
-	// An empty default resolves to empty, so Kubernetes uses the pod namespace's `default`.
-	require.Equal(t, "", resolveServiceAccount(nil, ""))
+func TestNewTaskExecutionMetadata_ServiceAccount(t *testing.T) {
+	taskTemplate, err := proto.Marshal(&core.TaskTemplate{
+		SecurityContext: &core.SecurityContext{RunAs: &core.Identity{K8SServiceAccount: "task-sa"}},
+	})
+	require.NoError(t, err)
+
+	withTemplate, err := NewTaskExecutionMetadata(&flyteorgv1.TaskAction{
+		Spec: flyteorgv1.TaskActionSpec{
+			K8sServiceAccount: "run-sa",
+			TaskTemplate:      taskTemplate,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "task-sa", withTemplate.GetK8sServiceAccount())
+
+	// The configured default is empty in tests, so a run account is what remains.
+	fromRun, err := NewTaskExecutionMetadata(&flyteorgv1.TaskAction{
+		Spec: flyteorgv1.TaskActionSpec{K8sServiceAccount: "run-sa"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "run-sa", fromRun.GetK8sServiceAccount())
 }
 
 func TestNewTaskExecutionMetadata_UsesProjectedRunContext(t *testing.T) {
