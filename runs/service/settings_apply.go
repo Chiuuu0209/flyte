@@ -65,6 +65,7 @@ func applyRunSettings(spec *task.RunSpec, resolved *settings.Settings) {
 		spec.Annotations.Values = addMissing(spec.Annotations.Values, annotations)
 	}
 	applyEnvSettings(spec, mapSettingValues(resolved.GetEnvironmentVariables()))
+	applyServiceAccount(spec, resolved.GetSecurity().GetServiceAccount())
 }
 
 // mapSettingValues returns the entries of a map setting in VALUE state, else nil.
@@ -109,4 +110,21 @@ func applyEnvSettings(spec *task.RunSpec, envs map[string]string) {
 		}
 		spec.Envs.Values = append(spec.Envs.Values, &core.KeyValuePair{Key: k, Value: envs[k]})
 	}
+}
+
+// applyServiceAccount fills the run's Kubernetes service account when the request
+// left it empty and the setting is VALUE. Every other security_context field stays
+// as the request left it.
+func applyServiceAccount(spec *task.RunSpec, sa *settings.StringSetting) {
+	if sa.GetState() != settings.SettingState_SETTING_STATE_VALUE ||
+		spec.GetSecurityContext().GetRunAs().GetK8SServiceAccount() != "" {
+		return
+	}
+	if spec.SecurityContext == nil {
+		spec.SecurityContext = &core.SecurityContext{}
+	}
+	if spec.SecurityContext.RunAs == nil {
+		spec.SecurityContext.RunAs = &core.Identity{}
+	}
+	spec.SecurityContext.RunAs.K8SServiceAccount = sa.GetStringValue()
 }

@@ -356,6 +356,9 @@ func TestApplyRunSpecToTaskAction_ProjectsRuntimeSettings(t *testing.T) {
 		DefaultSettings: &task.DefaultSettings{
 			PodTemplateName: "gpu-template",
 		},
+		SecurityContext: &core.SecurityContext{
+			RunAs: &core.Identity{K8SServiceAccount: "run-sa"},
+		},
 	})
 
 	require.NotNil(t, taskAction.Spec.Interruptible)
@@ -367,6 +370,7 @@ func TestApplyRunSpecToTaskAction_ProjectsRuntimeSettings(t *testing.T) {
 	assert.Equal(t, "platform", taskAction.Labels["team"])
 	assert.Equal(t, "sdk", taskAction.Annotations["owner"])
 	assert.Equal(t, "gpu-template", taskAction.Spec.PodTemplateName)
+	assert.Equal(t, "run-sa", taskAction.Spec.K8sServiceAccount)
 }
 
 func TestApplyRunSpecToTaskAction_RawDataPrefix(t *testing.T) {
@@ -381,6 +385,45 @@ func TestApplyRunSpecToTaskAction_RawDataPrefix(t *testing.T) {
 		applyRunSpecToTaskAction(ta, nil)
 		assert.Empty(t, ta.Spec.RawDataPrefix)
 	})
+}
+
+func TestApplyRunSpecToTaskAction_K8sServiceAccount(t *testing.T) {
+	tests := []struct {
+		name    string
+		before  string
+		runSpec *task.RunSpec
+		want    string
+	}{
+		{
+			name:    "copies the run account",
+			runSpec: &task.RunSpec{SecurityContext: &core.SecurityContext{RunAs: &core.Identity{K8SServiceAccount: "run-sa"}}},
+			want:    "run-sa",
+		},
+		{
+			name:    "an unset account stays empty",
+			runSpec: &task.RunSpec{},
+			want:    "",
+		},
+		{
+			name:    "a security context without an account stays empty",
+			runSpec: &task.RunSpec{SecurityContext: &core.SecurityContext{RunAs: &core.Identity{IamRole: "arn:role"}}},
+			want:    "",
+		},
+		{
+			name:    "a nil run spec clears a stale account",
+			before:  "stale-sa",
+			runSpec: nil,
+			want:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ta := &executorv1.TaskAction{Spec: executorv1.TaskActionSpec{K8sServiceAccount: tt.before}}
+			applyRunSpecToTaskAction(ta, tt.runSpec)
+			assert.Equal(t, tt.want, ta.Spec.K8sServiceAccount)
+		})
+	}
 }
 
 func TestInheritRunContextFromParentTaskAction(t *testing.T) {
@@ -399,9 +442,10 @@ func TestInheritRunContextFromParentTaskAction(t *testing.T) {
 				"TRACE_ID": "abc123",
 				"TEAM":     "platform",
 			},
-			Interruptible:   &interruptible,
-			PodTemplateName: "gpu-template",
-			RawDataPrefix:   "s3://raw-bucket/prefix",
+			Interruptible:     &interruptible,
+			PodTemplateName:   "gpu-template",
+			RawDataPrefix:     "s3://raw-bucket/prefix",
+			K8sServiceAccount: "run-sa",
 		},
 	}
 
@@ -424,6 +468,7 @@ func TestInheritRunContextFromParentTaskAction(t *testing.T) {
 	assert.Equal(t, "run1", child.Labels["flyte.org/run"])
 	assert.Equal(t, "sdk", child.Annotations["owner"])
 	assert.Equal(t, "gpu-template", child.Spec.PodTemplateName)
+	assert.Equal(t, "run-sa", child.Spec.K8sServiceAccount)
 
 	// Verify deep copy (child mutation must not mutate parent map).
 	child.Spec.EnvVars["TRACE_ID"] = "mutated"

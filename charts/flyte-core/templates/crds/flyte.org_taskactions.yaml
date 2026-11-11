@@ -118,6 +118,12 @@ spec:
                 description: Interruptible is the run-scoped interruptibility override
                   projected from RunSpec.
                 type: boolean
+              k8sServiceAccount:
+                description: |-
+                  K8sServiceAccount is the run-scoped Kubernetes service account projected from
+                  RunSpec.SecurityContext. Used when the task template names none.
+                maxLength: 253
+                type: string
               parentActionName:
                 description: ParentActionName is the optional name of the parent action
                 maxLength: 30

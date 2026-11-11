@@ -72,9 +72,16 @@ type taskExecutionMetadata struct {
 	serviceAccount  string
 }
 
-func resolveServiceAccount(securityContext *core.SecurityContext, defaultSA string) string {
+// resolveServiceAccount picks the Kubernetes service account for a task pod.
+// The task template wins, then a run-level account (the request, or settings
+// copied onto the run), then the configured default. An empty result leaves
+// the account unset so Kubernetes uses the namespace default.
+func resolveServiceAccount(securityContext *core.SecurityContext, runSA, defaultSA string) string {
 	if sa := securityContext.GetRunAs().GetK8SServiceAccount(); sa != "" {
 		return sa
+	}
+	if runSA != "" {
+		return runSA
 	}
 	return defaultSA
 }
@@ -174,7 +181,7 @@ func NewTaskExecutionMetadata(ta *flyteorgv1.TaskAction) (pluginsCore.TaskExecut
 		envVars:         envVars,
 		interruptible:   interruptible != nil && *interruptible,
 		securityContext: securityContext,
-		serviceAccount:  resolveServiceAccount(securityContext, executorconfig.GetConfig().DefaultK8sServiceAccount),
+		serviceAccount:  resolveServiceAccount(securityContext, ta.Spec.K8sServiceAccount, executorconfig.GetConfig().DefaultK8sServiceAccount),
 	}, nil
 }
 
